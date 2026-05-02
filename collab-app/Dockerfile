@@ -9,7 +9,8 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# We need devDeps for build (TypeScript, Prisma, etc)
+RUN npm ci
 
 # ── Stage 2: Build the application ──
 FROM node:20-alpine AS builder
@@ -20,6 +21,9 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+
+# Generate Prisma Client
+RUN npx prisma generate
 
 RUN npm run build
 
