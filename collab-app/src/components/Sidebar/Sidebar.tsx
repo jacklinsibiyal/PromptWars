@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import styles from "./Sidebar.module.css";
-import { projects, currentUser } from "@/lib/mock-data";
+import { projects } from "@/lib/mock-data";
 
 interface SidebarProps {
   activePage: string;
   onNavigate: (page: string) => void;
   activeProject: string | null;
   onSelectProject: (projectId: string) => void;
+  userName?: string;
+  userRole?: string;
+  onSignOut?: () => void;
 }
 
 const mainNavItems = [
@@ -19,16 +21,20 @@ const mainNavItems = [
   { id: "backlog", icon: "📥", label: "Backlog", badge: 12 },
 ];
 
-const bottomNavItems = [
-  { id: "settings", icon: "⚙️", label: "Settings" },
-  { id: "help", icon: "❓", label: "Help & Support" },
-];
-
-export default function Sidebar({ activePage, onNavigate, activeProject, onSelectProject }: SidebarProps) {
-  const initials = currentUser.name
+export default function Sidebar({
+  activePage,
+  onNavigate,
+  activeProject,
+  onSelectProject,
+  userName = "User",
+  userRole = "developer",
+  onSignOut,
+}: SidebarProps) {
+  const initials = userName
     .split(" ")
     .map((n) => n[0])
-    .join("");
+    .join("")
+    .toUpperCase();
 
   return (
     <aside className={styles.sidebar}>
@@ -78,17 +84,24 @@ export default function Sidebar({ activePage, onNavigate, activeProject, onSelec
 
         {/* Bottom Nav */}
         <div className={styles.navSection}>
-          {bottomNavItems.map((item) => (
+          <button
+            id="nav-settings"
+            className={`${styles.navItem} ${activePage === "settings" ? styles.navItemActive : ""}`}
+            onClick={() => onNavigate("settings")}
+          >
+            <span className={styles.navIcon}>⚙️</span>
+            Settings
+          </button>
+          {onSignOut && (
             <button
-              key={item.id}
-              id={`nav-${item.id}`}
-              className={`${styles.navItem} ${activePage === item.id ? styles.navItemActive : ""}`}
-              onClick={() => onNavigate(item.id)}
+              id="nav-signout"
+              className={styles.navItem}
+              onClick={onSignOut}
             >
-              <span className={styles.navIcon}>{item.icon}</span>
-              {item.label}
+              <span className={styles.navIcon}>🚪</span>
+              Sign Out
             </button>
-          ))}
+          )}
         </div>
       </nav>
 
@@ -97,8 +110,8 @@ export default function Sidebar({ activePage, onNavigate, activeProject, onSelec
         <div className={styles.userCard}>
           <div className={styles.userAvatar}>{initials}</div>
           <div>
-            <div className={styles.userName}>{currentUser.name}</div>
-            <div className={styles.userRole}>{currentUser.role}</div>
+            <div className={styles.userName}>{userName}</div>
+            <div className={styles.userRole}>{userRole}</div>
           </div>
           <div className={styles.statusDot} />
         </div>

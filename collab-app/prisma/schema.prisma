@@ -1,0 +1,289 @@
+// ============================================
+// TeamFlow — Prisma Schema
+// PostgreSQL on Neon (serverless)
+// ============================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+// ── NextAuth Models ──
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ── Core Models ──
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // hashed, for credentials login
+  role          Role      @default(DEVELOPER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // NextAuth relations
+  accounts Account[]
+  sessions Session[]
+
+  // App relations
+  workspaceMembers WorkspaceMember[]
+  assignedIssues   Issue[]           @relation("AssignedIssues")
+  reportedIssues   Issue[]           @relation("ReportedIssues")
+  comments         Comment[]
+  activities       Activity[]
+}
+
+enum Role {
+  ADMIN
+  PM
+  DEVELOPER
+}
+
+// ── Workspace & Projects ──
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members  WorkspaceMember[]
+  projects Project[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  userId      String
+  workspaceId String
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  key         String   // e.g., "TF"
+  description String?
+  color       String   @default("#6c5ce7")
+  icon        String   @default("📁")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  issues     Issue[]
+  sprints    Sprint[]
+  labels     Label[]
+  activities Activity[]
+
+  @@unique([workspaceId, key])
+}
+
+// ── Issues ──
+
+model Issue {
+  id          String      @id @default(cuid())
+  number      Int         // auto-incremented per project
+  title       String
+  description String?     @db.Text
+  type        IssueType   @default(TASK)
+  status      IssueStatus @default(BACKLOG)
+  priority    Priority    @default(MEDIUM)
+  storyPoints Int?
+  dueDate     DateTime?
+  position    Int         @default(0) // ordering within a column
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  projectId  String
+  assigneeId String?
+  reporterId String
+  sprintId   String?
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User?    @relation("AssignedIssues", fields: [assigneeId], references: [id])
+  reporter User     @relation("ReportedIssues", fields: [reporterId], references: [id])
+  sprint   Sprint?  @relation(fields: [sprintId], references: [id])
+
+  comments    Comment[]
+  labels      IssueLabel[]
+  attachments Attachment[]
+
+  @@unique([projectId, number])
+}
+
+enum IssueType {
+  BUG
+  FEATURE
+  TASK
+  STORY
+  EPIC
+}
+
+enum IssueStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  NONE
+}
+
+// ── Labels ──
+
+model Label {
+  id        String @id @default(cuid())
+  name      String
+  color     String @default("#6b7280")
+  projectId String
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  IssueLabel[]
+
+  @@unique([projectId, name])
+}
+
+model IssueLabel {
+  issueId String
+  labelId String
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, labelId])
+}
+
+// ── Comments ──
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  issueId String
+  userId  String
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Attachments ──
+
+model Attachment {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  size      Int      // bytes
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  issueId String
+  issue   Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+}
+
+// ── Sprints ──
+
+model Sprint {
+  id        String       @id @default(cuid())
+  name      String
+  goal      String?
+  status    SprintStatus @default(PLANNING)
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  issues Issue[]
+}
+
+enum SprintStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+}
+
+// ── Activity Log ──
+
+model Activity {
+  id        String   @id @default(cuid())
+  action    String   // e.g., "created", "moved", "commented"
+  target    String   // e.g., "TF-142"
+  details   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  userId    String
+  projectId String
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}

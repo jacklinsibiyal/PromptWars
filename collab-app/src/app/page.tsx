@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 import Sidebar from "@/components/Sidebar/Sidebar";
 import Header from "@/components/Header/Header";
@@ -10,10 +12,28 @@ import IssueModal from "@/components/IssueModal/IssueModal";
 import type { Issue } from "@/lib/types";
 
 export default function Home() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
   const [activePage, setActivePage] = useState("dashboard");
   const [activeProject, setActiveProject] = useState<string | null>("p1");
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Redirect to login if not authenticated
+  if (status === "loading") {
+    return (
+      <div className={styles.loadingScreen}>
+        <div className={styles.loadingSpinner} />
+        <p className={styles.loadingText}>Loading TeamFlow...</p>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    router.push("/login");
+    return null;
+  }
 
   const handleNavigate = (page: string) => {
     setActivePage(page);
@@ -30,35 +50,23 @@ export default function Home() {
 
   const getBreadcrumbs = (): string[] => {
     switch (activePage) {
-      case "dashboard":
-        return ["TeamFlow", "Dashboard"];
-      case "board":
-        return ["TeamFlow", "Board"];
-      case "my-issues":
-        return ["TeamFlow", "My Issues"];
-      case "sprints":
-        return ["TeamFlow", "Sprints"];
-      case "backlog":
-        return ["TeamFlow", "Backlog"];
-      default:
-        return ["TeamFlow"];
+      case "dashboard": return ["TeamFlow", "Dashboard"];
+      case "board": return ["TeamFlow", "Board"];
+      case "my-issues": return ["TeamFlow", "My Issues"];
+      case "sprints": return ["TeamFlow", "Sprints"];
+      case "backlog": return ["TeamFlow", "Backlog"];
+      default: return ["TeamFlow"];
     }
   };
 
   const getTitle = (): string => {
     switch (activePage) {
-      case "dashboard":
-        return "Dashboard";
-      case "board":
-        return "Board";
-      case "my-issues":
-        return "My Issues";
-      case "sprints":
-        return "Sprints";
-      case "backlog":
-        return "Backlog";
-      default:
-        return "TeamFlow";
+      case "dashboard": return "Dashboard";
+      case "board": return "Board";
+      case "my-issues": return "My Issues";
+      case "sprints": return "Sprints";
+      case "backlog": return "Backlog";
+      default: return "TeamFlow";
     }
   };
 
@@ -69,6 +77,9 @@ export default function Home() {
         onNavigate={handleNavigate}
         activeProject={activeProject}
         onSelectProject={handleSelectProject}
+        userName={session?.user?.name || "User"}
+        userRole={(session?.user as Record<string, unknown>)?.role as string || "developer"}
+        onSignOut={() => signOut({ callbackUrl: "/login" })}
       />
 
       <div className={styles.mainArea}>
