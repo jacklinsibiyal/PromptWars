@@ -1,0 +1,108 @@
+"use client";
+
+import { useState } from "react";
+import styles from "./Sidebar.module.css";
+import { projects, currentUser } from "@/lib/mock-data";
+
+interface SidebarProps {
+  activePage: string;
+  onNavigate: (page: string) => void;
+  activeProject: string | null;
+  onSelectProject: (projectId: string) => void;
+}
+
+const mainNavItems = [
+  { id: "dashboard", icon: "📊", label: "Dashboard" },
+  { id: "my-issues", icon: "📋", label: "My Issues", badge: 5 },
+  { id: "board", icon: "🗂️", label: "Board" },
+  { id: "sprints", icon: "🏃", label: "Sprints" },
+  { id: "backlog", icon: "📥", label: "Backlog", badge: 12 },
+];
+
+const bottomNavItems = [
+  { id: "settings", icon: "⚙️", label: "Settings" },
+  { id: "help", icon: "❓", label: "Help & Support" },
+];
+
+export default function Sidebar({ activePage, onNavigate, activeProject, onSelectProject }: SidebarProps) {
+  const initials = currentUser.name
+    .split(" ")
+    .map((n) => n[0])
+    .join("");
+
+  return (
+    <aside className={styles.sidebar}>
+      {/* Logo */}
+      <div className={styles.logo}>
+        <div className={styles.logoIcon}>T</div>
+        <span className={styles.logoText}>
+          Team<span className={styles.logoTextAccent}>Flow</span>
+        </span>
+      </div>
+
+      {/* Navigation */}
+      <nav className={styles.nav}>
+        {/* Main Nav */}
+        <div className={styles.navSection}>
+          <div className={styles.navSectionTitle}>Navigation</div>
+          {mainNavItems.map((item) => (
+            <button
+              key={item.id}
+              id={`nav-${item.id}`}
+              className={`${styles.navItem} ${activePage === item.id ? styles.navItemActive : ""}`}
+              onClick={() => onNavigate(item.id)}
+            >
+              <span className={styles.navIcon}>{item.icon}</span>
+              {item.label}
+              {item.badge && <span className={styles.navBadge}>{item.badge}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Projects */}
+        <div className={styles.navSection}>
+          <div className={styles.navSectionTitle}>Projects</div>
+          {projects.map((project) => (
+            <button
+              key={project.id}
+              id={`project-${project.id}`}
+              className={`${styles.navItem} ${activeProject === project.id ? styles.navItemActive : ""}`}
+              onClick={() => onSelectProject(project.id)}
+            >
+              <span className={styles.projectDot} style={{ background: project.color }} />
+              {project.name}
+              <span className={styles.navBadge}>{project.openIssues}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Bottom Nav */}
+        <div className={styles.navSection}>
+          {bottomNavItems.map((item) => (
+            <button
+              key={item.id}
+              id={`nav-${item.id}`}
+              className={`${styles.navItem} ${activePage === item.id ? styles.navItemActive : ""}`}
+              onClick={() => onNavigate(item.id)}
+            >
+              <span className={styles.navIcon}>{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* User Card */}
+      <div className={styles.userSection}>
+        <div className={styles.userCard}>
+          <div className={styles.userAvatar}>{initials}</div>
+          <div>
+            <div className={styles.userName}>{currentUser.name}</div>
+            <div className={styles.userRole}>{currentUser.role}</div>
+          </div>
+          <div className={styles.statusDot} />
+        </div>
+      </div>
+    </aside>
+  );
+}
