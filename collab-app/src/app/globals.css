@@ -23,10 +23,10 @@
   --color-surface-modal: rgba(255, 255, 255, 0.98);
   --color-surface-glass: rgba(108, 92, 231, 0.04);
 
-  /* Borders */
-  --color-border-subtle: rgba(0, 0, 0, 0.07);
-  --color-border-default: rgba(0, 0, 0, 0.12);
-  --color-border-strong: rgba(0, 0, 0, 0.2);
+  /* Borders (Strengthened for better visibility) */
+  --color-border-subtle: #e1e4e8;
+  --color-border-default: #d1d5db;
+  --color-border-strong: #9ca3af;
   --color-border-focus: #6c5ce7;
 
   /* Text */
