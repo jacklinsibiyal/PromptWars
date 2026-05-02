@@ -11,14 +11,15 @@ interface SidebarProps {
   userName?: string;
   userRole?: string;
   onSignOut?: () => void;
+  theme?: string;
+  onToggleTheme?: () => void;
 }
 
 const mainNavItems = [
   { id: "dashboard", icon: "📊", label: "Dashboard" },
-  { id: "my-issues", icon: "📋", label: "My Issues", badge: 5 },
+  { id: "my-issues", icon: "📋", label: "My Issues" },
   { id: "board", icon: "🗂️", label: "Board" },
   { id: "sprints", icon: "🏃", label: "Sprints" },
-  { id: "backlog", icon: "📥", label: "Backlog", badge: 12 },
 ];
 
 export default function Sidebar({
@@ -29,6 +30,8 @@ export default function Sidebar({
   userName = "User",
   userRole = "developer",
   onSignOut,
+  theme,
+  onToggleTheme,
 }: SidebarProps) {
   const initials = userName
     .split(" ")
@@ -38,7 +41,6 @@ export default function Sidebar({
 
   return (
     <aside className={styles.sidebar}>
-      {/* Logo */}
       <div className={styles.logo}>
         <div className={styles.logoIcon}>T</div>
         <span className={styles.logoText}>
@@ -46,58 +48,42 @@ export default function Sidebar({
         </span>
       </div>
 
-      {/* Navigation */}
       <nav className={styles.nav}>
-        {/* Main Nav */}
         <div className={styles.navSection}>
           <div className={styles.navSectionTitle}>Navigation</div>
           {mainNavItems.map((item) => (
             <button
               key={item.id}
-              id={`nav-${item.id}`}
               className={`${styles.navItem} ${activePage === item.id ? styles.navItemActive : ""}`}
               onClick={() => onNavigate(item.id)}
             >
               <span className={styles.navIcon}>{item.icon}</span>
               {item.label}
-              {item.badge && <span className={styles.navBadge}>{item.badge}</span>}
             </button>
           ))}
         </div>
 
-        {/* Projects */}
         <div className={styles.navSection}>
           <div className={styles.navSectionTitle}>Projects</div>
           {projects.map((project) => (
             <button
               key={project.id}
-              id={`project-${project.id}`}
               className={`${styles.navItem} ${activeProject === project.id ? styles.navItemActive : ""}`}
               onClick={() => onSelectProject(project.id)}
             >
               <span className={styles.projectDot} style={{ background: project.color }} />
               {project.name}
-              <span className={styles.navBadge}>{project.openIssues}</span>
             </button>
           ))}
         </div>
 
-        {/* Bottom Nav */}
         <div className={styles.navSection}>
-          <button
-            id="nav-settings"
-            className={`${styles.navItem} ${activePage === "settings" ? styles.navItemActive : ""}`}
-            onClick={() => onNavigate("settings")}
-          >
-            <span className={styles.navIcon}>⚙️</span>
-            Settings
+          <button className={styles.navItem} onClick={onToggleTheme}>
+            <span className={styles.navIcon}>{theme === "dark" ? "☀️" : "🌙"}</span>
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
           </button>
           {onSignOut && (
-            <button
-              id="nav-signout"
-              className={styles.navItem}
-              onClick={onSignOut}
-            >
+            <button className={styles.navItem} onClick={onSignOut}>
               <span className={styles.navIcon}>🚪</span>
               Sign Out
             </button>
@@ -105,7 +91,6 @@ export default function Sidebar({
         </div>
       </nav>
 
-      {/* User Card */}
       <div className={styles.userSection}>
         <div className={styles.userCard}>
           <div className={styles.userAvatar}>{initials}</div>

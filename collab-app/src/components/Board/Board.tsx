@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import styles from "./Board.module.css";
-import { getKanbanColumns, projects, sprints } from "@/lib/mock-data";
 import type { Issue, Column, IssueStatus } from "@/lib/types";
 
 interface BoardProps {
@@ -11,35 +10,61 @@ interface BoardProps {
 }
 
 const typeIcons: Record<string, string> = {
-  bug: "🐛",
-  feature: "✨",
-  task: "📌",
-  story: "📖",
-  epic: "🏔️",
+  BUG: "🐛",
+  FEATURE: "✨",
+  TASK: "📌",
+  STORY: "📖",
+  EPIC: "🏔️",
 };
 
 const priorityConfig: Record<string, { icon: string; color: string }> = {
-  critical: { icon: "🔴", color: "var(--color-priority-critical)" },
-  high: { icon: "🟠", color: "var(--color-priority-high)" },
-  medium: { icon: "🟡", color: "var(--color-priority-medium)" },
-  low: { icon: "🟢", color: "var(--color-priority-low)" },
-  none: { icon: "⚪", color: "var(--color-priority-none)" },
+  CRITICAL: { icon: "🔴", color: "var(--color-priority-critical)" },
+  HIGH: { icon: "🟠", color: "var(--color-priority-high)" },
+  MEDIUM: { icon: "🟡", color: "var(--color-priority-medium)" },
+  LOW: { icon: "🟢", color: "var(--color-priority-low)" },
+  NONE: { icon: "⚪", color: "var(--color-priority-none)" },
 };
 
-const avatarColors = ["#6c5ce7", "#00cec9", "#e17055", "#00b894", "#fdcb6e", "#a29bfe"];
+const columnDefs: { id: IssueStatus; title: string; color: string }[] = [
+  { id: "TODO", title: "To Do", color: "#74b9ff" },
+  { id: "IN_PROGRESS", title: "In Progress", color: "#fdcb6e" },
+  { id: "IN_REVIEW", title: "In Review", color: "#a29bfe" },
+  { id: "DONE", title: "Done", color: "#00b894" },
+];
 
 export default function Board({ projectId, onIssueClick }: BoardProps) {
-  const project = projects.find((p) => p.id === projectId);
-  const activeSprint = sprints.find((s) => s.projectId === projectId && s.status === "active");
-
-  const [columns, setColumns] = useState<Column[]>(() => getKanbanColumns(projectId));
+  const [columns, setColumns] = useState<Column[]>([]);
+  const [loading, setLoading] = useState(true);
   const [draggedIssue, setDraggedIssue] = useState<Issue | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<IssueStatus | null>(null);
+
+  const fetchBoardData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/issues?projectId=${projectId}`);
+      const data = await res.json();
+      
+      if (data.issues) {
+        // Map issues into columns
+        const newColumns = columnDefs.map(def => ({
+          ...def,
+          issues: data.issues.filter((i: any) => i.status === def.id)
+        }));
+        setColumns(newColumns);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchBoardData();
+  }, [fetchBoardData]);
 
   const handleDragStart = useCallback((e: React.DragEvent, issue: Issue) => {
     setDraggedIssue(issue);
     e.dataTransfer.effectAllowed = "move";
-    // Use a timeout so the dragging class applies after the drag image is created
     setTimeout(() => {
       const el = document.getElementById(`card-${issue.id}`);
       if (el) el.classList.add(styles.issueCardDragging);
@@ -61,57 +86,52 @@ export default function Board({ projectId, onIssueClick }: BoardProps) {
     setDragOverColumn(columnId);
   }, []);
 
-  const handleDragLeave = useCallback(() => {
-    setDragOverColumn(null);
-  }, []);
-
   const handleDrop = useCallback(
-    (e: React.DragEvent, targetColumnId: IssueStatus) => {
+    async (e: React.DragEvent, targetColumnId: IssueStatus) => {
       e.preventDefault();
-      if (!draggedIssue) return;
+      if (!draggedIssue || draggedIssue.status === targetColumnId) return;
 
+      // Optimistic update
       setColumns((prev) =>
         prev.map((col) => {
-          // Remove from source
           const filtered = col.issues.filter((i) => i.id !== draggedIssue.id);
           if (col.id === targetColumnId) {
-            // Add to target
             return { ...col, issues: [...filtered, { ...draggedIssue, status: targetColumnId }] };
           }
           return { ...col, issues: filtered };
         })
       );
 
+      // API update
+      try {
+        await fetch(`/api/issues/${draggedIssue.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: targetColumnId }),
+        });
+      } catch (err) {
+        console.error(err);
+        fetchBoardData(); // Revert on failure
+      }
+
       setDraggedIssue(null);
       setDragOverColumn(null);
     },
-    [draggedIssue]
+    [draggedIssue, fetchBoardData]
   );
+
+  if (loading) return <div className={styles.boardLoading}>Loading Board...</div>;
 
   return (
     <div className={styles.board}>
-      {/* Board Header */}
       <div className={styles.boardHeader}>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <h1 className={styles.boardTitle}>
-            {project?.icon} {project?.name ?? "Board"}
-          </h1>
-          {activeSprint && (
-            <span className={styles.sprintBadge}>
-              <span className={styles.sprintDot} />
-              {activeSprint.name} · {activeSprint.completedCount}/{activeSprint.issueCount}
-            </span>
-          )}
-        </div>
+        <h1 className={styles.boardTitle}>Project Board</h1>
         <div className={styles.boardFilters}>
-          <button className={`${styles.filterBtn} ${styles.filterBtnActive}`}>All Types</button>
-          <button className={styles.filterBtn}>🐛 Bugs</button>
-          <button className={styles.filterBtn}>✨ Features</button>
-          <button className={styles.filterBtn}>👤 Assigned to me</button>
+          <button className={`${styles.filterBtn} ${styles.filterBtnActive}`}>All Issues</button>
+          <button className={styles.filterBtn}>My Tasks</button>
         </div>
       </div>
 
-      {/* Columns */}
       <div className={styles.columnsContainer}>
         {columns.map((column) => (
           <div key={column.id} className={styles.column}>
@@ -121,13 +141,12 @@ export default function Board({ projectId, onIssueClick }: BoardProps) {
                 <span className={styles.columnTitle}>{column.title}</span>
                 <span className={styles.columnCount}>{column.issues.length}</span>
               </div>
-              <button className={styles.columnAddBtn} title="Add issue">+</button>
             </div>
 
             <div
               className={`${styles.columnCards} ${dragOverColumn === column.id ? styles.columnDropzone : ""}`}
               onDragOver={(e) => handleDragOver(e, column.id)}
-              onDragLeave={handleDragLeave}
+              onDragLeave={() => setDragOverColumn(null)}
               onDrop={(e) => handleDrop(e, column.id)}
             >
               {column.issues.map((issue, index) => (
@@ -143,43 +162,24 @@ export default function Board({ projectId, onIssueClick }: BoardProps) {
                 >
                   <div className={styles.issueCardTop}>
                     <span className={styles.issueKey}>{issue.key}</span>
-                    <span className={styles.issueType}>{typeIcons[issue.type]}</span>
+                    <span className={styles.issueType}>{typeIcons[issue.type] || "📌"}</span>
                   </div>
                   <div className={styles.issueTitle}>{issue.title}</div>
-                  {issue.labels.length > 0 && (
-                    <div className={styles.issueLabels}>
-                      {issue.labels.slice(0, 3).map((label) => (
-                        <span key={label} className={styles.issueLabel}>{label}</span>
-                      ))}
-                    </div>
-                  )}
                   <div className={styles.issueCardBottom}>
                     <div className={styles.issueCardMeta}>
                       <span className={styles.issuePriority}>
-                        {priorityConfig[issue.priority].icon}
+                        {priorityConfig[issue.priority]?.icon || "⚪"}
                       </span>
                       {issue.storyPoints && (
                         <span className={styles.issuePoints}>{issue.storyPoints} SP</span>
                       )}
-                      <div className={styles.issueMetaIcons}>
-                        {issue.commentCount > 0 && (
-                          <span className={styles.issueMetaItem}>💬 {issue.commentCount}</span>
-                        )}
-                        {issue.attachmentCount > 0 && (
-                          <span className={styles.issueMetaItem}>📎 {issue.attachmentCount}</span>
-                        )}
-                      </div>
                     </div>
                     {issue.assignee ? (
-                      <div
-                        className={styles.issueAssignee}
-                        style={{ background: avatarColors[parseInt(issue.assignee.id.slice(1)) % avatarColors.length] }}
-                        title={issue.assignee.name}
-                      >
+                      <div className={styles.issueAssignee} title={issue.assignee.name}>
                         {issue.assignee.name.split(" ").map((n) => n[0]).join("")}
                       </div>
                     ) : (
-                      <div className={styles.issueAssigneeNone} title="Unassigned">?</div>
+                      <div className={styles.issueAssigneeNone}>?</div>
                     )}
                   </div>
                 </div>

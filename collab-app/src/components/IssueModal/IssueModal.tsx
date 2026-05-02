@@ -1,187 +1,261 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import styles from "./IssueModal.module.css";
-import type { Issue } from "@/lib/types";
+import type { Issue, IssueStatus, Priority, User } from "@/lib/types";
 
 interface IssueModalProps {
-  issue: Issue;
+  issueId: string;
   onClose: () => void;
+  onUpdate?: () => void; // Refresh parent board
 }
 
 const typeIcons: Record<string, string> = {
-  bug: "🐛",
-  feature: "✨",
-  task: "📌",
-  story: "📖",
-  epic: "🏔️",
+  BUG: "🐛",
+  FEATURE: "✨",
+  TASK: "📌",
+  STORY: "📖",
+  EPIC: "🏔️",
 };
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-  backlog:     { label: "Backlog",     color: "#6b7280", bg: "rgba(107,114,128,0.15)" },
-  todo:        { label: "To Do",       color: "#74b9ff", bg: "rgba(116,185,255,0.15)" },
-  in_progress: { label: "In Progress", color: "#fdcb6e", bg: "rgba(253,203,110,0.15)" },
-  in_review:   { label: "In Review",   color: "#a29bfe", bg: "rgba(162,155,254,0.15)" },
-  done:        { label: "Done",        color: "#00b894", bg: "rgba(0,184,148,0.15)" },
+  BACKLOG:     { label: "Backlog",     color: "#6b7280", bg: "rgba(107,114,128,0.15)" },
+  TODO:        { label: "To Do",       color: "#74b9ff", bg: "rgba(116,185,255,0.15)" },
+  IN_PROGRESS: { label: "In Progress", color: "#fdcb6e", bg: "rgba(253,203,110,0.15)" },
+  IN_REVIEW:   { label: "In Review",   color: "#a29bfe", bg: "rgba(162,155,254,0.15)" },
+  DONE:        { label: "Done",        color: "#00b894", bg: "rgba(0,184,148,0.15)" },
 };
 
 const priorityConfig: Record<string, { icon: string; label: string; color: string }> = {
-  critical: { icon: "🔴", label: "Critical", color: "var(--color-priority-critical)" },
-  high:     { icon: "🟠", label: "High",     color: "var(--color-priority-high)" },
-  medium:   { icon: "🟡", label: "Medium",   color: "var(--color-priority-medium)" },
-  low:      { icon: "🟢", label: "Low",      color: "var(--color-priority-low)" },
-  none:     { icon: "⚪", label: "None",     color: "var(--color-priority-none)" },
+  CRITICAL: { icon: "🔴", label: "Critical", color: "var(--color-priority-critical)" },
+  HIGH:     { icon: "🟠", label: "High",     color: "var(--color-priority-high)" },
+  MEDIUM:   { icon: "🟡", label: "Medium",   color: "var(--color-priority-medium)" },
+  LOW:      { icon: "🟢", label: "Low",      color: "var(--color-priority-low)" },
+  NONE:     { icon: "⚪", label: "None",     color: "var(--color-priority-none)" },
 };
 
-const avatarColors = ["#6c5ce7", "#00cec9", "#e17055", "#00b894", "#fdcb6e", "#a29bfe"];
+export default function IssueModal({ issueId, onClose, onUpdate }: IssueModalProps) {
+  const [issue, setIssue] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<User[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
 
-export default function IssueModal({ issue, onClose }: IssueModalProps) {
-  // Close on Escape
+  const fetchIssue = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/issues/${issueId}`);
+      const data = await res.json();
+      if (data.issue) setIssue(data.issue);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [issueId]);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("/api/users");
+      const data = await res.json();
+      if (data.users) setUsers(data.users);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
+    fetchIssue();
+    fetchUsers();
+    
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [fetchIssue, onClose]);
 
-  const status = statusConfig[issue.status];
-  const priority = priorityConfig[issue.priority];
+  const handleUpdateField = async (field: string, value: any) => {
+    try {
+      const res = await fetch(`/api/issues/${issueId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (res.ok) {
+        fetchIssue();
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return;
+    setSubmittingComment(true);
+    try {
+      const res = await fetch(`/api/issues/${issueId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: commentText }),
+      });
+      if (res.ok) {
+        setCommentText("");
+        fetchIssue();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className={styles.overlay}>
+        <div className={styles.modal} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px' }}>
+          <div className="loadingSpinner" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!issue) return null;
+
+  const status = statusConfig[issue.status] || statusConfig.BACKLOG;
+  const priority = priorityConfig[issue.priority] || priorityConfig.MEDIUM;
 
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div className={styles.modalHeader}>
           <div className={styles.modalHeaderLeft}>
-            <span className={styles.issueKeyBadge}>{issue.key}</span>
-            <span className={styles.issueTypeBadge}>{typeIcons[issue.type]}</span>
+            <span className={styles.issueKeyBadge}>{issue.project?.key}-{issue.number}</span>
+            <select 
+              className={styles.typeSelect}
+              value={issue.type}
+              onChange={(e) => handleUpdateField("type", e.target.value)}
+            >
+              <option value="TASK">📌 Task</option>
+              <option value="BUG">🐛 Bug</option>
+              <option value="FEATURE">✨ Feature</option>
+              <option value="STORY">📖 Story</option>
+            </select>
           </div>
-          <button id="modal-close" className={styles.closeBtn} onClick={onClose}>
-            ✕
-          </button>
+          <button className={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
 
-        {/* Body */}
         <div className={styles.modalBody}>
-          {/* Main Content */}
           <div className={styles.mainContent}>
-            <h2 className={styles.issueTitle}>{issue.title}</h2>
+            <input 
+              className={styles.issueTitleInput}
+              value={issue.title}
+              onChange={(e) => setIssue({...issue, title: e.target.value})}
+              onBlur={(e) => handleUpdateField("title", e.target.value)}
+            />
 
             <div className={styles.descriptionLabel}>Description</div>
-            <div className={styles.descriptionText}>
-              {issue.description}
-            </div>
+            <textarea 
+              className={styles.descriptionTextarea}
+              value={issue.description || ""}
+              placeholder="Add a description..."
+              onChange={(e) => setIssue({...issue, description: e.target.value})}
+              onBlur={(e) => handleUpdateField("description", e.target.value)}
+            />
 
-            {issue.labels.length > 0 && (
-              <div className={styles.labelsRow}>
-                {issue.labels.map((label) => (
-                  <span key={label} className={styles.label}>{label}</span>
-                ))}
-              </div>
-            )}
-
-            {/* Comments */}
             <div className={styles.commentsSection}>
-              <div className={styles.commentsTitle}>
-                Comments ({issue.commentCount})
-              </div>
+              <div className={styles.commentsTitle}>Comments ({issue.comments?.length || 0})</div>
               <div className={styles.commentInputRow}>
-                <div className={styles.commentAvatar}>AR</div>
                 <textarea
-                  id="comment-input"
                   className={styles.commentInput}
                   placeholder="Add a comment..."
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAddComment();
+                    }
+                  }}
                 />
+                <button 
+                  className={styles.sendCommentBtn}
+                  onClick={handleAddComment}
+                  disabled={submittingComment || !commentText.trim()}
+                >
+                  Post
+                </button>
+              </div>
+
+              <div className={styles.commentList}>
+                {issue.comments?.map((comment: any) => (
+                  <div key={comment.id} className={styles.commentItem}>
+                    <div className={styles.commentHeader}>
+                      <span className={styles.commentAuthor}>{comment.user.name}</span>
+                      <span className={styles.commentTime}>
+                        {new Date(comment.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className={styles.commentContent}>{comment.content}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Side Panel */}
           <div className={styles.sidePanel}>
             <div className={styles.detailGroup}>
               <div className={styles.detailLabel}>Status</div>
-              <span
-                className={styles.statusBadge}
-                style={{ color: status.color, background: status.bg }}
+              <select 
+                className={styles.fieldSelect}
+                style={{ color: status.color, background: status.bg, borderColor: status.color }}
+                value={issue.status}
+                onChange={(e) => handleUpdateField("status", e.target.value)}
               >
-                {status.label}
-              </span>
+                {Object.entries(statusConfig).map(([key, val]) => (
+                  <option key={key} value={key}>{val.label}</option>
+                ))}
+              </select>
             </div>
 
             <div className={styles.detailGroup}>
               <div className={styles.detailLabel}>Priority</div>
-              <span className={styles.priorityBadge}>
-                {priority.icon} {priority.label}
-              </span>
+              <select 
+                className={styles.fieldSelect}
+                value={issue.priority}
+                onChange={(e) => handleUpdateField("priority", e.target.value)}
+              >
+                {Object.entries(priorityConfig).map(([key, val]) => (
+                  <option key={key} value={key}>{val.icon} {val.label}</option>
+                ))}
+              </select>
             </div>
 
             <div className={styles.detailDivider} />
 
             <div className={styles.detailGroup}>
               <div className={styles.detailLabel}>Assignee</div>
-              {issue.assignee ? (
-                <div className={styles.assigneeRow}>
-                  <div
-                    className={styles.assigneeAvatar}
-                    style={{
-                      background: avatarColors[parseInt(issue.assignee.id.slice(1)) % avatarColors.length],
-                    }}
-                  >
-                    {issue.assignee.name.split(" ").map((n) => n[0]).join("")}
-                  </div>
-                  <span className={styles.detailValue}>{issue.assignee.name}</span>
-                </div>
-              ) : (
-                <span className={styles.detailValue} style={{ color: "var(--color-text-muted)" }}>
-                  Unassigned
-                </span>
-              )}
+              <select 
+                className={styles.fieldSelect}
+                value={issue.assigneeId || ""}
+                onChange={(e) => handleUpdateField("assigneeId", e.target.value || null)}
+              >
+                <option value="">Unassigned</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
             </div>
 
             <div className={styles.detailGroup}>
-              <div className={styles.detailLabel}>Reporter</div>
-              <div className={styles.assigneeRow}>
-                <div
-                  className={styles.assigneeAvatar}
-                  style={{
-                    background: avatarColors[parseInt(issue.reporter.id.slice(1)) % avatarColors.length],
-                  }}
-                >
-                  {issue.reporter.name.split(" ").map((n) => n[0]).join("")}
-                </div>
-                <span className={styles.detailValue}>{issue.reporter.name}</span>
-              </div>
-            </div>
-
-            <div className={styles.detailDivider} />
-
-            {issue.storyPoints !== null && (
-              <div className={styles.detailGroup}>
-                <div className={styles.detailLabel}>Story Points</div>
-                <span className={styles.detailValue}>{issue.storyPoints}</span>
-              </div>
-            )}
-
-            {issue.dueDate && (
-              <div className={styles.detailGroup}>
-                <div className={styles.detailLabel}>Due Date</div>
-                <span className={styles.detailValue}>{issue.dueDate}</span>
-              </div>
-            )}
-
-            <div className={styles.detailGroup}>
-              <div className={styles.detailLabel}>Created</div>
-              <span className={styles.detailValue} style={{ color: "var(--color-text-secondary)" }}>
-                {issue.createdAt}
-              </span>
-            </div>
-
-            <div className={styles.detailGroup}>
-              <div className={styles.detailLabel}>Updated</div>
-              <span className={styles.detailValue} style={{ color: "var(--color-text-secondary)" }}>
-                {issue.updatedAt}
-              </span>
+              <div className={styles.detailLabel}>Story Points</div>
+              <input 
+                type="number"
+                className={styles.pointsInput}
+                value={issue.storyPoints || ""}
+                placeholder="-"
+                onChange={(e) => handleUpdateField("storyPoints", parseInt(e.target.value) || null)}
+              />
             </div>
           </div>
         </div>
